@@ -1,0 +1,80 @@
+import * as Yup from 'yup';
+import User from '../models/User';
+
+class UserController {
+  async store(req, res) {
+    const schema = Yup.object().shape({
+      name: Yup.string().required(),
+      email: Yup.string()
+        .email()
+        .required(),
+      password: Yup.string()
+        .required()
+        .min(6),
+    });
+    if (!(await schema.isValid(req.body))) {
+      return res
+        .status(400)
+        .json({ error: 'Falha na validação dos dados fornecidos' });
+    }
+    const emailExist = await User.findOne({ where: { email: req.body.email } });
+    if (emailExist) {
+      return res
+        .status(400)
+        .json({ error: 'Email já existe na base de dados' });
+    }
+    const { id, name, email, provider } = await User.create(req.body);
+    return res.json({
+      id,
+      name,
+      email,
+      provider,
+    });
+  }
+
+  async update(req, res) {
+    const schema = Yup.object().shape({
+      name: Yup.string(),
+      email: Yup.string().email(),
+      avatar_id: Yup.number(),
+      oldPassword: Yup.string().min(6),
+      password: Yup.string().when('oldPassword', (oldPassword, field) =>
+        oldPassword ? field.required() : field
+      ),
+      confirmPassword: Yup.string().when('password', (password, field) =>
+        password ? field.required().oneOf([Yup.ref('password')]) : field
+      ),
+    });
+
+    if (!(await schema.isValid(req.body))) {
+      return res
+        .status(400)
+        .json({ error: 'Falha na validação dos dados fornecidos!' });
+    }
+    const { email, oldPassword } = req.body;
+
+    const user = await User.findByPk(req.userId);
+
+    if (email && email !== user.email) {
+      const emailExist = await User.findOne({ where: { email } });
+      if (emailExist) {
+        return res
+          .status(400)
+          .json({ error: 'Email já existe na base de dados' });
+      }
+    }
+    if (oldPassword && !(await user.checkPassword(oldPassword))) {
+      return res.status(401).json({ error: 'As senhas não conferem' });
+    }
+
+    const { id, name, provider } = await user.update(req.body);
+
+    return res.json({
+      id,
+      name,
+      email,
+      provider,
+    });
+  }
+}
+export default new UserController();
